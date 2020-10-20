@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: zuul-service
+server:
+  port: 8770
+#这个是自己设置的，让外部环境来访问的API路由，请求经由这个定向到真实注册eureka上的服务
+zuul:
+  routes:
+    permission:
+      path: /permissionApi/**
+#这个是真实的注册到了Eureka上门的服务名字
+      serviceId: permission
+  sensitive-headers:
+eureka:
+  instance:
+    instance-id: http://localhost:${server.port}/${spring.application.name}
+    #表示本服务发送给eureka服务端的心跳时间，设置时间不能太长，不然会导致eureka检测不到服务从而会驱逐服务下线
+    lease-renewal-interval-in-seconds: 2
+    #当本服务掉线后，eureka服务端取掉本服务的缓存的时间
+    lease-expiration-duration-in-seconds: 4
+  client:
+    service-url:
+      defaultZone: http://localhost:8791/eureka
