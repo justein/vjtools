@@ -4,22 +4,26 @@ import com.netflix.zuul.ZuulFilter;
 import com.netflix.zuul.context.RequestContext;
 import com.netflix.zuul.exception.ZuulException;
 import com.zfinfo.microservice.constants.ZuulConstants;
+import com.zfinfo.microservice.utils.CookieUtils;
+import com.zfinfo.microservice.utils.HttpUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.HttpStatus;
 import org.springframework.cloud.netflix.zuul.filters.support.FilterConstants;
 import org.springframework.stereotype.Component;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 
 /**
- * @ClassName : AccessFilter
- * @Description : 请求接入过滤器
+ * @ClassName : LoginFilter
+ * @Description : 登录校验过滤器
  * @Author : Lyn
  * @CopyRight ZFINFO
- * @Date: 2020-10-20 16:57
+ * @Date: 2020-10-21 14:33
  */
 @Component
-public class AccessFilter extends ZuulFilter {
+public class LoginFilter extends ZuulFilter {
 
     /**
      * 过滤器类型，前置过滤器
@@ -34,14 +38,16 @@ public class AccessFilter extends ZuulFilter {
     public String filterType() {
         return FilterConstants.PRE_TYPE;
     }
+
     /**
      * filter执行顺序，通过数字指定，数字越小，执行顺序越先
      * @return
      */
     @Override
     public int filterOrder() {
-        return 2;
+        return 3;
     }
+
     /**
      * 过滤器是否生效
      * 返回true代表需要本过滤器进行过滤，返回false代表不需要本过滤器进行过滤
@@ -52,47 +58,57 @@ public class AccessFilter extends ZuulFilter {
         RequestContext requestContext = RequestContext.getCurrentContext();
         HttpServletRequest request = requestContext.getRequest();
         String currentRequestURI = request.getRequestURI();
-        System.out.println("当前请求路径："+currentRequestURI);
+        System.out.println("在LoginFilter中，当前请求路径为："+currentRequestURI);
 
+        //不需要登录校验的URL
+        //不需要token校验的URL
         /**下面这一票请求不用走过滤*/
         if (ZuulConstants.PERMISSION_LOGIN.equals(currentRequestURI)
                 || ZuulConstants.PERMISSION_REGISTER.equals(currentRequestURI)
                 || ZuulConstants.PERMISSION_LOGOUT.equals(currentRequestURI) ) {
             return false;
         }
+
         return true;
     }
 
-
-
     /**
-     * token校验
+     * 业务逻辑
      * 只有上面返回true的时候，才会进入到该方法
      */
     @Override
     public Object run() throws ZuulException {
-
         RequestContext requestContext = RequestContext.getCurrentContext();
         HttpServletRequest request = requestContext.getRequest();
-        //token对象,有可能在请求头传递过来，也有可能是通过参数传过来，实际开发一般都是请求头方式
-        String token = request.getHeader("token");
+        HttpServletResponse response=requestContext.getResponse();
 
-        if (StringUtils.isBlank((token))) {
-            token = request.getParameter("token");
-        }
-        System.out.println("页面传来的token值为：" + token);
+        //取用户token
+        String userToken = null;
 
-        //登录校验逻辑  如果token为null，则直接返回客户端，而不进行下一步接口调用
-        if (StringUtils.isBlank(token)) {
-            /**不再继续往后传递，而是返回给客户端*/
-            requestContext.setSendZuulResponse(false);
-            /**返回错误代码*/
-            requestContext.setResponseStatusCode(HttpStatus.SC_UNAUTHORIZED);
-            requestContext.setResponseBody("{\"result\":\"you are unauthorized.\"}");
-        }else{
-            requestContext.setSendZuulResponse(true);
-            requestContext.setResponseStatusCode(HttpStatus.SC_OK);
+        userToken = CookieUtils.getCookieValue(request,"cookie_token_key");
+        if (StringUtils.isBlank(userToken)) {
+            userToken = request.getHeader("token");
         }
+
+            try {
+                /**取不到用户token，则重定向到登录页*/
+                if (StringUtils.isBlank(userToken)) {
+                    response.sendRedirect(request.getRequestURL() + "?redirect=" + HttpUtils.getBaseURL(request));
+                    requestContext.setSendZuulResponse(false);
+                    requestContext.setResponseStatusCode(HttpStatus.SC_UNAUTHORIZED);
+//                    return false;
+                }else {
+                    /**如果能取到用户token，则说明用户已经登陆过了*/
+                    /**需要搞一个登录认证的服务，把用户token放进redis*/
+                    /**网关从redis取userToken*/
+
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+
         return null;
     }
 }
